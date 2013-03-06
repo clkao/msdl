@@ -119,6 +119,7 @@ struct download_opts_t {
     /* username & password */
     char *username;
     char *password;
+    struct options_t *options;
 };
 
 

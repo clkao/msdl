@@ -593,6 +593,7 @@ static int prepare_download(char *target_str,struct options_t *options,
     dlopts = new_download_opts_t();
     set_dlopts_from_options(options,dlopts);
     dlopts->dl_protocol = url->protocol_type;
+    dlopts->options = options;
 
     /*
       if url starts with "http", try MMSH first, and fallback on HTTP.
@@ -975,8 +976,19 @@ int streaming_download(const char *local_file,struct url_t *url,struct download_
 		    /*
 		      have to write data AFTER deleting all current file content.
 		    */
+		    char *newname = create_local_file_name("", dlopts->options);
+		        display(MSDL_ERR,"rewind to newname: %s\n", newname);
+
+		    fclose(fp);
+		    if (!strcmp(newname, "-")) {
+			fp = stdout;
+		    }
+		    else if((fp = fopen(newname, "wb")) ==  NULL) {
+		        display(MSDL_ERR,"cannot create file \"%s\"\n","new");
+		        perror("");
+		        goto failed;
+		    }
 		    display(MSDL_VER,"rewind file!!\n");
-		    rewind(fp);
 		    size_written = 0;
 		    real_downloaded_size = 0;
 		    stream->stream_ctrl->packet_count = 0;
