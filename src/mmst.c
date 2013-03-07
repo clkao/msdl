@@ -317,7 +317,7 @@ int mmst_streaming_start(struct stream_t *stream)
      * first thing to do: 0x01 command, do the protocol initiation.
      */
     snprintf((char *)buffer2,BUFSIZE_1K - 1,
-	     "\034\003NSPlayer/7.0.0.1956; {33715801-BAB3-9D85-24E9-03B90328270A}; Host: %s",
+	     "\034\003NSPlayer/9.0.0.2980; {4E5FC7E6-8840-443A-9F24-E2B4465A667C}; Host: %s",
 	     stream->serverinfo->host);
   
     string_utf16((char *)buffer,(char *)buffer2,
@@ -325,7 +325,7 @@ int mmst_streaming_start(struct stream_t *stream)
   
     /*  send !! */
     send_command(stream,1,
-		 0,
+		 0xf0f0f0f0,
 		 0x0004000b,
 		 strlen((char *)buffer2)*2+2,
 		 buffer);
@@ -342,16 +342,33 @@ int mmst_streaming_start(struct stream_t *stream)
 	
 	goto failed;
     }
-  
+
+    /* 0x18 timing test */
+    send_command(stream,0x18,
+		 0xf0f0f0ef,
+		 0x0004000b,
+                 0, NULL);
+    if(mmst_get_command_packet(stream) < 0) {
+	free(path);
+	display(MSDL_ERR,"mmst message could not received\n");
+	display(MSDL_ERR,
+		"server probably does not accept mmst\n"
+		"retry using mmsh protocol\n");
+	stream->stream_ctrl->status = STREAMING_OTHER_PROTOCOL;
+	stream->stream_ctrl->retry_protocol = MMSH;
+	
+	goto failed;
+    }
     /*
      * 0x02 command. send details of the local IP addr
      */
     string_utf16((char *)buffer + 8,
 		 "\002\000\\\\192.168.0.1\\TCP\\1037", 24);
     memset(buffer,0,8);
+    memcpy(buffer+4, "\x80\x96\x98\x00", 4);
     send_command(stream,2,
 		 0,
-		 0,
+		 0xffffffff,
 		 24*2+10,
 		 buffer);
   
@@ -372,7 +389,7 @@ int mmst_streaming_start(struct stream_t *stream)
     memset(buffer,0,8);
     memset(out,0,10);
     send_command(stream,5,
-		 0,
+		 1,
 		 0,
 		 res + 10,
 		 buffer);
@@ -390,6 +407,10 @@ int mmst_streaming_start(struct stream_t *stream)
      */
     memset(buffer,0,40);
     buffer[0x20] = 2;
+    buffer[0x1f] = 0x40;
+    buffer[0x1e] = 0xac;
+    buffer[0x1d] = 0x20;
+    memcpy(buffer+4,"\x00\x80\x00\x00\xff\xff\xff\xff",8);
     send_command(stream,0x15,
 		 1,
 		 0,
@@ -441,6 +462,8 @@ int mmst_streaming_start(struct stream_t *stream)
     mmst_ctrl->num_stream_ids = 
 	mmst_ctrl->hinfo->streams->n_audio + mmst_ctrl->hinfo->streams->n_video;
   
+
+#if 0
     /*
      * 0x33 command, not understood very well
      */
@@ -513,7 +536,7 @@ int mmst_streaming_start(struct stream_t *stream)
 		 pos - 4,
 		 buffer + 4);
     mmst_get_command_packet(stream);
-    
+#endif
     /*
      * 0x07 command. includes ?session value and maximum media stream time
      */
@@ -522,10 +545,11 @@ int mmst_streaming_start(struct stream_t *stream)
 	buffer[i] = 0xFF;
     }
     buffer[20] = 0x04;
+    memcpy(buffer+24, "\xff\xff\xff\x7f\x80\x96\x98\x00\xff\xff\xff\x7f\x00\x2f\x00\x44", 16);
     send_command(stream,0x07,
 		 1,
 		 0,
-		 24,
+		 40,
 		 buffer);
   
     /**   now everything is done, wait for media packets !!!   **/
@@ -794,10 +818,11 @@ static int mmst_get_media_packet(struct stream_t *stream, uint8_t *buffer, size_
 		        buffer[i] = 0xFF;
 		    }
 		    buffer[20] = 0x04;
+                    memcpy(buffer+24, "\xff\xff\xff\x7f\x80\x96\x98\x00\xff\xff\xff\x7f\x61\xcf\x11\x8b", 16);
 		    send_command(stream,0x07,
 		                 1,
 		                 0,
-		                 24,
+		                 40,
 		                 buffer);
 		    free(buffer);
 		}
