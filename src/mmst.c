@@ -81,6 +81,7 @@
 #include "asf.h"
 #include "mmst.h"
 
+#include <iconv.h>
 
 static struct mmst_ctrl_t *new_mmst_ctrl_t(void);
 static void free_mmst_ctrl_t(struct mmst_ctrl_t *mctrl);
@@ -360,12 +361,20 @@ int mmst_streaming_start(struct stream_t *stream)
     /*
      * 0x05 command, send request file path.
      */
-    string_utf16((char *)buffer + 8,path,strlen(path));
+
+    iconv_t ic = iconv_open("utf-16le", "utf-8");
+
+    size_t in_bytes = strlen(path), out_bytes = in_bytes * 2;
+    char *in = path, *out = (char *)buffer + 8, *start = out;
+    size_t res = iconv(ic, &in, &in_bytes, &out, &out_bytes);
+    res = out - start;
+    dbgdump(buffer + 8,res);
     memset(buffer,0,8);
+    memset(out,0,10);
     send_command(stream,5,
 		 0,
 		 0,
-		 strlen(path) * 2 + 10,
+		 res + 10,
 		 buffer);
   
     free(path);
