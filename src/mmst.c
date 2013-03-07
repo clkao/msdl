@@ -783,6 +783,8 @@ static int mmst_get_media_packet(struct stream_t *stream, uint8_t *buffer, size_
 		display(MSDL_DBG,"ASF_HEADER---------------------\n");
 		dbgdump(asf_header,asf_header_len);
 		display(MSDL_DBG,"\n-------------------------------\n");
+		/* set file size to download */
+		stream_ctrl->file_size = mmst_ctrl->hinfo->fileh->file_size;
 
 		if (1) {
 		    char *buffer = (uint8_t *)xmalloc(BUFSIZE_1K);  /* send buffer. used for data to send */
