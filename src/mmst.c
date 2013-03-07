@@ -189,7 +189,7 @@ static int mmst_get_asf_header(struct stream_t *stream, uint8_t *header)
 	if(read_data(stream,pre_header,8) <= 0) { /* read_data() failed. */
 	    goto failed;
 	}
-	if(pre_header[4] == 0x02) { /*   header packet   */
+	if(pre_header[4] == 0x02 || pre_header[4] == 0xff) { /*   header packet   */
 
 	    packet_len = get16_le(((uint8_t *)&pre_header) + 6) - 8;
       
@@ -635,13 +635,15 @@ static int mmst_get_media_packet(struct stream_t *stream, uint8_t *buffer, size_
     uint32_t packet_len;
     uint32_t command;
     int ret;
+    int should_end = 0;
   
 
     while (1) {
     
 	stream_ctrl->write_data_len = 0;
     
-	if(read_data(stream,pre_header,8) <= 0) {
+	ret = read_data(stream, pre_header, 8);
+	if(ret <= 0) {
 	    display(MSDL_ERR,"could not receive packet pre header\n");
 	    goto failed;
 	}
@@ -710,8 +712,10 @@ static int mmst_get_media_packet(struct stream_t *stream, uint8_t *buffer, size_
       
 	    /* get command packet */
 	    if(read_data(stream, combuf, packet_len) <= 0) {
-		display(MSDL_ERR,"command data read failed\n");
 		free(combuf);
+		if (should_end)
+		    return 0;
+		display(MSDL_ERR,"command data read failed\n");
 		goto failed;
 	    }
 
@@ -725,9 +729,78 @@ static int mmst_get_media_packet(struct stream_t *stream, uint8_t *buffer, size_
 			     combuf);
 	    }
 	    else if(command == 0x1E) { /* End Of Stream (EOS) */
+		display(MSDL_VER,"\nENDING command %x\n", command);
 		stream_ctrl->status = STREAMING_FINISHED;
 		free(combuf);
-		return 0; /* End Of Stream!! */
+		should_end = 1;
+	    }
+	    else if(command == 0x20) {
+		struct mmst_ctrl_t *mmst_ctrl = stream_ctrl->mmst_ctrl;
+		display(MSDL_VER,"\nREWIND command %x, read %d\n", command, packet_len);
+		display(MSDL_DBG,"=-recv (command)-----------------------------------=\n");
+		dbgdump(combuf,packet_len);
+		display(MSDL_DBG,"\n=--------------------------------------------------=\n");
+		stream_ctrl->status = STREAMING_REWIND;
+		should_end = 0;
+		int asf_header_len = mmst_get_asf_header(stream,stream_ctrl->write_buffer);
+
+		if(asf_header_len <= 0) { /* failed */
+		    display(MSDL_ERR,"cannot receive M$ asf header\n");
+		    goto failed;
+		}
+		uint8_t *asf_header = stream_ctrl->write_buffer;
+		stream_ctrl->write_pos = 0;
+		stream_ctrl->write_data_len = 0;
+
+		mmst_ctrl->hinfo->asf_header = xmalloc(asf_header_len);
+		free_asf_headerinfo_t(mmst_ctrl->hinfo);
+		mmst_ctrl->hinfo = new_asf_headerinfo_t();
+		mmst_ctrl->hinfo->asf_header = xmalloc(asf_header_len);
+		mmst_ctrl->hinfo->asf_header_len = asf_header_len;
+		memcpy(mmst_ctrl->hinfo->asf_header,asf_header,asf_header_len);
+
+		if(asf_interpret_header(mmst_ctrl->hinfo,stream_ctrl->bandwidth,
+		                           asf_header,asf_header_len) < 0) {
+		    display(MSDL_ERR,"asf header fail\n");
+		    goto failed;
+		}
+
+		struct asf_headerinfo_t *asf_headerinfo = mmst_ctrl->hinfo;
+		/* write header to write buffer and return... */
+		if(asf_headerinfo->asf_header_len <= max_size) { /* everything can go... */
+		    memcpy(buffer,asf_headerinfo->asf_header,
+		           asf_headerinfo->asf_header_len);
+		    ret = asf_headerinfo->asf_header_len;
+		}
+		else {
+		    memcpy(buffer,asf_headerinfo->asf_header,max_size);
+		    memcpy(stream_ctrl->write_buffer, asf_headerinfo->asf_header + max_size,
+		           asf_headerinfo->asf_header_len - max_size);
+		    stream_ctrl->write_data_len = asf_headerinfo->asf_header_len - max_size;
+		    ret = max_size;
+		}
+
+		display(MSDL_DBG,"ASF_HEADER---------------------\n");
+		dbgdump(asf_header,asf_header_len);
+		display(MSDL_DBG,"\n-------------------------------\n");
+
+		if (1) {
+		    char *buffer = (uint8_t *)xmalloc(BUFSIZE_1K);  /* send buffer. used for data to send */
+		    memset(buffer,0,40);
+		    int i;
+		    for(i = 8 ; i < 16 ; i++) {
+		        buffer[i] = 0xFF;
+		    }
+		    buffer[20] = 0x04;
+		    send_command(stream,0x07,
+		                 1,
+		                 0,
+		                 24,
+		                 buffer);
+		    free(buffer);
+		}
+
+		return ret;
 	    }
 	    else if(command == 0x05) {
 		; /* wired packet, ignore this (not UNKNOWN) */
@@ -810,7 +883,7 @@ int mmst_streaming_read(struct stream_t *stream, uint8_t *buffer,
 	return ret + pos;
     }
     else {
-        return -1;
+	return -1;
     }
 }
 
