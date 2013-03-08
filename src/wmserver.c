@@ -657,6 +657,10 @@ int wmserver_rtp_get_media_packet(struct stream_t *stream,
 
 		    int ret = 0;		    
 		    display(MSDL_DBG,"ANNOUNCE packet: streaming still continues!!\n");
+		    stream->stream_ctrl->rtsp_ctrl->asf_headerinfo = asf_headerinfo;    /* set infomation */
+		    stream->stream_ctrl->packet_length = asf_headerinfo->fileh->max_packet_size;
+		    stream->stream_ctrl->file_size = asf_headerinfo->fileh->file_size;
+		    stream->stream_ctrl->total_packets = asf_headerinfo->fileh->num_packets;
 		    
 		    /* write header to write buffer and return... */
 		    if(asf_headerinfo->asf_header_len <= max_size) { /* everything can go... */
