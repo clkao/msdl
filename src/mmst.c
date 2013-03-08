@@ -692,7 +692,9 @@ static int mmst_get_media_packet(struct stream_t *stream, uint8_t *buffer, size_
 		}
 		if (ret < stream_ctrl->packet_length)
 		    memset(buffer + ret, 0, stream_ctrl->packet_length - ret); /* padding */
-		ret = stream_ctrl->packet_length;
+		else {
+		    ret = stream_ctrl->packet_length;
+		}
 	    }
 	    else { /* buffer is NOT big enough for incoming packet.. (and padding) */
 		ret = read_data(stream, stream_ctrl->write_buffer, packet_len);

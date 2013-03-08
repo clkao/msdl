@@ -930,8 +930,11 @@ static int wmserver_process_media_packet(struct stream_t *stream,uint8_t *header
 	ret = read_data(stream,buffer,size);
 	if(ret <= 0) goto failed;
 
-	memset(buffer + size,0,stream_ctrl->packet_length - size); /* padding */
-	return stream_ctrl->packet_length;
+	if (size < stream_ctrl->packet_length) {
+	    memset(buffer + size,0,stream_ctrl->packet_length - size); /* padding */
+	    return stream_ctrl->packet_length;
+	}
+	return size;
     }
     else {
 	/*
